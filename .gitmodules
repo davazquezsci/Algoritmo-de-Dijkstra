@@ -1,0 +1,3 @@
+[submodule "lib/Biblioteca-grafos"]
+	path = lib/Biblioteca-grafos
+	url = https://github.com/davazquezsci/Biblioteca-grafos.git
