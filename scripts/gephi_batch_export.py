@@ -4,9 +4,12 @@
 # PROYECTO 3:
 #   - inputs: outputs/gv/generados/<modelo>/*.gv  y  outputs/gv/dijkstra/<modelo>/*.gv
 #   - outputs: outputs/img/generados/<modelo>/*.pdf  y  outputs/img/dijkstra/<modelo>/*.pdf
-# Labels:
+# Labels (forzados en el grafo):
+#   - Node labels: ID del nodo
+#   - Edge labels: peso (weight)
+# Preview:
 #   - Node labels: Serif 5 blanco
-#   - Edge labels (pesos): Serif 5 Italic negro
+#   - Edge labels: Serif 5 Italic negro
 # Node size:
 #   - Generados: Ranking Degree size 5..40
 #   - Dijkstra: Size fijo 10 (min=max=10)
@@ -36,10 +39,9 @@ from org.gephi.io.exporter.api import ExportController
 from java.awt import Color, Font
 
 
-# ---- AJUSTA ESTO A TU RUTA (raíz del repo Proyecto 3) ----
-ROOT = r"C:\P3\Algoritmo-de-Dijkstra"
+# ---- AJUSTA ESTO A TU RUTA CORTA (alias) ----
+ROOT = r"P:\Algoritmo-de-Dijkstra"
 
-# Entradas y salidas (Proyecto 3)
 GV_GENERADOS = File(ROOT, "outputs\\gv\\generados")
 GV_DIJKSTRA  = File(ROOT, "outputs\\gv\\dijkstra")
 
@@ -52,9 +54,8 @@ print("GV_DIJKSTRA  =", GV_DIJKSTRA.getAbsolutePath(),  "exists?", GV_DIJKSTRA.e
 print("IMG_GENERADOS =", IMG_GENERADOS.getAbsolutePath(), "exists?", IMG_GENERADOS.exists(), "isDir?", IMG_GENERADOS.isDirectory())
 print("IMG_DIJKSTRA  =", IMG_DIJKSTRA.getAbsolutePath(),  "exists?", IMG_DIJKSTRA.exists(),  "isDir?", IMG_DIJKSTRA.isDirectory())
 
-# Layout config
-FA2_ITERS_1 = 400   # FA2 sin overlap
-FA2_ITERS_2 = 400   # FA2 con overlap (ajustando tamaños)
+FA2_ITERS_1 = 400
+FA2_ITERS_2 = 400
 
 
 def ensure_dir(path_or_file):
@@ -67,19 +68,11 @@ def ensure_dir(path_or_file):
 
 
 def is_tree_like(name):
-    """
-    - dijkstra debe tratarse como árbol
-    - bfs/dfs también (si algún día los vuelves a exportar aquí)
-    """
     name = name.lower()
     return ("_bfs" in name) or ("_dfs" in name) or ("_dijkstra" in name)
 
 
 def randomize_positions(workspace, seed=1337, scale=1000.0):
-    """
-    Inicializa posiciones (x,y) al azar sin depender del Random layout plugin.
-    Evita API mismatch de layouts en 0.10.x.
-    """
     graphModel = Lookup.getDefault().lookup(GraphController).getGraphModel(workspace)
     graph = graphModel.getGraphVisible()
     rng = JRandom(seed)
@@ -103,13 +96,11 @@ def run_forceatlas2(workspace, iters, prevent_overlap):
     fa2 = ForceAtlas2(ForceAtlas2Builder())
     fa2.setGraphModel(graphModel)
 
-    # Parámetros base
     fa2.setScalingRatio(2.0)
     fa2.setGravity(1.0)
     fa2.setStrongGravityMode(False)
     fa2.setLinLogMode(False)
 
-    # Prevent overlap
     fa2.setAdjustSizes(True if prevent_overlap else False)
 
     fa2.initAlgo()
@@ -119,11 +110,6 @@ def run_forceatlas2(workspace, iters, prevent_overlap):
 
 
 def apply_degree_size_ranking(workspace, min_size, max_size):
-    """
-    Ranking por degree -> size, aplicado manualmente:
-    size = min_size + (deg - deg_min)/(deg_max-deg_min) * (max_size-min_size)
-    Si min_size == max_size, todos quedan con size fijo.
-    """
     graphModel = Lookup.getDefault().lookup(GraphController).getGraphModel(workspace)
     graph = graphModel.getGraphVisible()
 
@@ -157,36 +143,58 @@ def apply_degree_size_ranking(workspace, min_size, max_size):
         graph.writeUnlock()
 
 
+def force_labels(workspace, want_node_labels, want_edge_labels):
+    """
+    Garantiza que existan labels reales en el grafo:
+    - Nodos: label = id (para que Preview los pueda mostrar)
+    - Aristas: label = peso (edge.getWeight()) con 2 decimales
+    """
+    graphModel = Lookup.getDefault().lookup(GraphController).getGraphModel(workspace)
+    graph = graphModel.getGraphVisible()
+
+    graph.writeLock()
+    try:
+        if want_node_labels:
+            itn = graph.getNodes().iterator()
+            while itn.hasNext():
+                n = itn.next()
+                # En Gephi, Preview usa Node.getLabel(), no el ID.
+                if n.getLabel() is None or len(n.getLabel()) == 0:
+                    n.setLabel(str(n.getId()))
+
+        if want_edge_labels:
+            ite = graph.getEdges().iterator()
+            while ite.hasNext():
+                e = ite.next()
+                # Preferimos el weight numérico; si no existe, será 1.0
+                w = e.getWeight()
+                e.setLabel("%.2f" % float(w))
+    finally:
+        graph.writeUnlock()
+
+
 def configure_preview(workspace, tree_mode, show_node_labels, show_edge_labels):
     previewController = Lookup.getDefault().lookup(PreviewController)
     previewModel = previewController.getModel(workspace)
     props = previewModel.getProperties()
 
-    # Base visual
-    props.putValue("edgeCurved", (not tree_mode))     # grafos base curvos, árboles rectos
+    # Estilo básico (sin flechas para evitar incompatibilidades)
+    props.putValue("edgeCurved", (not tree_mode))
     props.putValue("edgeThickness", 0.3 if not tree_mode else 0.8)
 
-    # Flechas solo para árboles
-    props.putValue("showArrows", True if tree_mode else False)
-    props.putValue("arrowSize", 8.0 if tree_mode else 0.0)
-
-    # ---- NODE LABELS (Serif 5, blanco) ----
+    # Node labels (Serif 5 blanco)
     props.putValue("showNodeLabels", True if show_node_labels else False)
-    props.putValue("nodeLabelFont", Font("Serif", Font.PLAIN, 5))
-    props.putValue("nodeLabelColor", Color(255, 255, 255))  # blanco
-
-    # Outline para legibilidad (si te molesta, pon 0.0)
+    props.putValue("nodeLabelFont", Font("Serif", Font.PLAIN, 20))
+    props.putValue("nodeLabelColor", Color(255, 255, 255))
     props.putValue("nodeLabelOutlineSize", 1.0)
-    props.putValue("nodeLabelOutlineColor", Color(0, 0, 0))  # negro
-
-    # "Dentro del nodo" (mejor centrado con box transparente)
+    props.putValue("nodeLabelOutlineColor", Color(0, 0, 0))
     props.putValue("nodeLabelBox", True)
     props.putValue("nodeLabelBoxOpacity", 0.0)
 
-    # ---- EDGE LABELS (Serif 5 Italic, negro) ----
+    # Edge labels (Serif 5 Italic negro)
     props.putValue("showEdgeLabels", True if show_edge_labels else False)
-    props.putValue("edgeLabelFont", Font("Serif", Font.ITALIC, 5))
-    props.putValue("edgeLabelColor", Color(0, 0, 0))  # negro
+    props.putValue("edgeLabelFont", Font("Serif", Font.ITALIC, 14))
+    props.putValue("edgeLabelColor", Color(0, 0, 0))
     props.putValue("edgeLabelOutlineSize", 0.0)
 
     previewController.refreshPreview(workspace)
@@ -216,7 +224,6 @@ def process_dir(gv_root_dir, img_root_dir, category_name):
 
     for modelo_dir in model_dirs:
         modelo = modelo_dir.getName()
-
         out_dir = File(img_root_dir, modelo)
         ensure_dir(out_dir)
 
@@ -225,7 +232,7 @@ def process_dir(gv_root_dir, img_root_dir, category_name):
         gv_files.sort(key=lambda f: f.getName().lower())
 
         for gv_file in gv_files:
-            name = gv_file.getName()[:-3]  # quita ".gv"
+            name = gv_file.getName()[:-3]
             out_pdf = File(out_dir, name + ".pdf")
 
             print("[%s] Importando:" % category_name, gv_file.getAbsolutePath())
@@ -244,21 +251,23 @@ def process_dir(gv_root_dir, img_root_dir, category_name):
             # 2) FA2 sin overlap
             run_forceatlas2(workspace, FA2_ITERS_1, prevent_overlap=False)
 
-            # 3) Tamaño de nodos según categoría
+            # 3) Tamaño por categoría
             if category_name == "generados":
-                apply_degree_size_ranking(workspace, 5.0, 40.0)    # ranking 5..40
+                apply_degree_size_ranking(workspace, 5.0, 40.0)
             else:
-                apply_degree_size_ranking(workspace, 10.0, 10.0)   # fijo 10
+                apply_degree_size_ranking(workspace, 10.0, 10.0)
 
-            # 4) FA2 con prevent overlap (ya tomando en cuenta tamaños)
+            # 4) FA2 con overlap
             run_forceatlas2(workspace, FA2_ITERS_2, prevent_overlap=True)
 
-            # Preview:
-            # - Generados: edge labels ON (pesos), node labels OFF
-            # - Dijkstra: node labels ON (distancias), edge labels OFF
+            # Preview + labels forzados:
             if category_name == "generados":
+                # Solo pesos en aristas
+                force_labels(workspace, want_node_labels=False, want_edge_labels=True)
                 configure_preview(workspace, tree_mode, show_node_labels=False, show_edge_labels=True)
             else:
+                # Solo nombres de nodos (ya vienen "nodo_i (dist)" en el ID, pero forzamos label=id)
+                force_labels(workspace, want_node_labels=True, want_edge_labels=False)
                 configure_preview(workspace, tree_mode, show_node_labels=True, show_edge_labels=False)
 
             export_pdf(workspace, out_pdf)
@@ -278,7 +287,6 @@ except Exception:
     import traceback
     err = traceback.format_exc()
     print(err)
-    # Guarda error dentro del repo
     ensure_dir(File(ROOT, "scripts"))
     f = open(os.path.join(ROOT, "scripts", "gephi_batch_error.txt"), "w")
     f.write(err)

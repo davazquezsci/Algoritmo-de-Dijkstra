@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "P:\Algoritmo-de-Dijkstra\scripts\gephi_batch_export_2.py", line 298, in <module>
+    main()
+  File "P:\Algoritmo-de-Dijkstra\scripts\gephi_batch_export_2.py", line 292, in main
+    process_dir(GV_GENERADOS, IMG_GENERADOS, "generados")
+  File "P:\Algoritmo-de-Dijkstra\scripts\gephi_batch_export_2.py", line 256, in process_dir
+    importController.process(container, DefaultProcessor(), workspace)
+RuntimeError: maximum recursion depth exceeded
