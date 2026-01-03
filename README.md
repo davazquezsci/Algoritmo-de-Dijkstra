@@ -18,7 +18,8 @@ El proyecto incluye:
 Implementar el método:
 
 ```python
-def Dijkstra(self, s):
+    def Dijkstra(self, s):
+```
 
 
 en la clase Grafo, de tal forma que, dado un nodo fuente s, se calcule la distancia mínima desde s hacia todos los demás nodos, y se construya el árbol de caminos más cortos inducido por dichas distancias. 
